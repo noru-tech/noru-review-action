@@ -1,0 +1,280 @@
+# Fixture: a complete, attributed AI inventory. The validator must exit 0 on this file.
+# Everything here is invented for the test; no customer data, no real credentials, no catalogue ids.
+#
+# It is also the worked example of the findings block, which is ordered on purpose:
+#   1. prohibited_practices        Article 5, applicable since 2 February 2025
+#   2. transparency_obligations    Article 50, applicable since 2 August 2026
+#   3. role_and_risk               obligations apply from the date each finding states
+#   4. standards_alignment         ISO/IEC 42001 and NIST AI RMF
+version: 0.1.0
+piece: ai-inventory
+source:
+  slug: example-org/example-app
+  commit_sha: 4f3c1a9e77b2d5c8a10e6b4f2d9c3a71e5b80d64
+  branch: main
+  generated_by: ai-inventory@0.1.0
+  derived_digest: 3b1f0c9a7d24e658b0c1a3f57d9e2b846c0f1a2d3e4b5c6d7a8e9f0b1c2d3e4f
+providers:
+  - key: example-llm
+    vendor_name: Example LLM Provider
+    category: software_as_a_service
+    endpoints:
+      - https://api.example-llm.test/v1
+    claims:
+      - kind: zero_retention
+        value: Zero data retention enabled for this account
+        source:
+          type: repo_config
+          ref: packages/inference/src/client.ts:37
+        interpretation:
+          owner: dana.reed@example.com
+          decided_at: 2026-08-01
+          expires_at: 2027-02-01
+          rationale: >
+            The client is constructed with store disabled and the account-level retention setting is
+            asserted in the same module, so the claim is ours to make and ours to keep true.
+      - kind: no_training
+        value: Provider states customer API data is not used for training
+        source:
+          type: vendor_documentation
+          url: https://example-llm.test/legal/data-usage
+          retrieved_on: 2026-08-01
+        interpretation:
+          owner: dana.reed@example.com
+          decided_at: 2026-08-01
+          expires_at: 2027-02-01
+          rationale: >
+            This is the provider's published statement, not something we configured or verified.
+            It is recorded as their word so a reviewer can tell the two kinds of claim apart.
+      - kind: dpa
+        value: DPA executed 2026-03-14, standard contractual clauses annexed
+        source:
+          type: contract
+          document: contracts/example-llm-dpa-2026-03-14.pdf
+        interpretation:
+          owner: sam.okafor@example.com
+          decided_at: 2026-03-20
+          next_review_due: 2027-02-01
+          rationale: >
+            Procedural obligation reviewed on the contract renewal cadence rather than on a
+            technical expiry, so no expires_at is set.
+    refs:
+      - packages/inference/src/client.ts:12
+      - packages/inference/src/client.ts:37
+    interpretation:
+      owner: dana.reed@example.com
+      decided_at: 2026-08-01
+      next_review_due: 2027-02-01
+      rationale: >
+        Confirmed this is the only model provider reachable from production code paths as of this
+        commit; reviewed with the platform team.
+ai_systems:
+  - key: support-triage
+    name: Support ticket triage
+    purpose: Classifies inbound support tickets by urgency and routes them to the right queue.
+    provider: example-llm
+    models:
+      - gpt-5-mini
+    deployment: hosted_api
+    autonomy: supervised
+    human_oversight:
+      - type: human_approval_gate
+        description: A support lead approves any routing the model marks as urgent.
+        refs:
+          - apps/support/src/triage/review-queue.ts:88
+      - type: override_or_kill_switch
+        description: The triage path is behind a feature flag that disables it instantly.
+        refs:
+          - apps/support/src/triage/flags.ts:14
+    inputs:
+      description: Ticket body and requester metadata.
+      data_categories:
+        - user.contact.email
+        - user.behavior
+      refs:
+        - apps/support/src/triage/handler.ts:41
+    outputs:
+      description: A queue name and an urgency score written back to the ticket.
+      refs:
+        - apps/support/src/triage/handler.ts:73
+    retrieval:
+      - name: support-articles
+        kind: vector_store
+        data_categories:
+          - system.operations
+        refs:
+          - apps/support/src/triage/retrieval.ts:23
+    evals:
+      suites:
+        - name: triage-accuracy
+          path: apps/support/evals/triage
+          measures:
+            - routing accuracy
+            - urgency false-negative rate
+      ci_gated: true
+      refs:
+        - .github/workflows/evals.yml:19
+    data_categories:
+      - user.contact.email
+      - user.behavior
+    refs:
+      - apps/support/src/triage/handler.ts:41
+      - apps/support/src/triage/handler.ts:73
+    interpretation:
+      owner: dana.reed@example.com
+      decided_at: 2026-08-01
+      expires_at: 2027-02-01
+      rationale: >
+        Walked the triage path end to end with the support engineering lead and confirmed the
+        approval gate is the only way an urgent routing reaches a customer.
+  - key: shift-scheduler
+    name: Shift swap assistant
+    purpose: >
+      Answers employee questions about shift swaps in a chat panel and proposes a swap the roster
+      owner then approves.
+    provider: example-llm
+    models:
+      - gpt-5-mini
+    deployment: hosted_api
+    autonomy: assistive
+    human_oversight:
+      - type: human_approval_gate
+        description: The roster owner approves every proposed swap before it takes effect.
+        refs:
+          - apps/roster/src/swap/approval.ts:52
+    inputs:
+      description: The employee's question and their own roster entries.
+      data_categories:
+        - user.contact.email
+      refs:
+        - apps/roster/src/swap/chat-route.ts:24
+    outputs:
+      description: A chat reply and a proposed swap awaiting approval.
+      refs:
+        - apps/roster/src/swap/chat-route.ts:61
+    evals:
+      suites: []
+      ci_gated: false
+    data_categories:
+      - user.contact.email
+    refs:
+      - apps/roster/src/swap/chat-route.ts:24
+      - apps/roster/src/swap/chat-route.ts:61
+    interpretation:
+      owner: dana.reed@example.com
+      decided_at: 2026-08-02
+      expires_at: 2027-02-02
+      rationale: >
+        Read the chat route with the roster team; the model never writes to the roster directly and
+        every proposal stops at the approval step.
+findings:
+  prohibited_practices:
+    - system: shift-scheduler
+      practice: emotion_inference_workplace_or_education
+      article: Article 5(1)(f)
+      determination: no_indication
+      status: suggested
+      refs:
+        - apps/roster/src/swap/chat-route.ts:24
+      interpretation:
+        owner: sam.okafor@example.com
+        decided_at: 2026-08-02
+        expires_at: 2027-02-02
+        rationale: >
+          Screened because this is a workplace tool. It reads roster entries and free text, takes no
+          biometric input and infers no emotional state, so the screen ran and found nothing. Recorded
+          rather than left silent so the next reader knows the question was asked.
+    - system: support-triage
+      practice: social_scoring
+      article: Article 5(1)(c)
+      determination: no_indication
+      status: suggested
+      refs:
+        - apps/support/src/triage/handler.ts:41
+      interpretation:
+        owner: sam.okafor@example.com
+        decided_at: 2026-08-02
+        expires_at: 2027-02-02
+        rationale: >
+          The urgency score applies to a ticket, not to a person, and is not carried across contexts,
+          so the screen found nothing to review.
+  transparency_obligations:
+    - system: shift-scheduler
+      trigger: direct_human_interaction
+      article: Article 50(1)
+      required_action: inform_natural_person
+      applies_to_role: deployer
+      disclosure:
+        state: present
+        mechanism: >
+          The chat panel renders a fixed first message identifying the assistant as AI before any
+          input is accepted, from the same component that mounts the model call.
+        refs:
+          - apps/roster/src/swap/ChatPanel.tsx:31
+          - apps/roster/src/locales/en.json:214
+      status: suggested
+      refs:
+        - apps/roster/src/swap/chat-route.ts:24
+      interpretation:
+        owner: sam.okafor@example.com
+        decided_at: 2026-08-02
+        expires_at: 2027-02-02
+        rationale: >
+          Employees type into this panel and read what the model writes back, so Article 50(1) is in
+          play. The notice is rendered before the first exchange rather than in a help page, which is
+          what Article 50(5) asks for. Re-check when the panel is restyled.
+  role_and_risk:
+    - system: shift-scheduler
+      role: deployer
+      role_article: Article 3(4)
+      tier: not_high_risk
+      tier_article: Article 6(3)
+      annex_iii_area: employment_and_worker_management
+      not_high_risk_assessment:
+        ground: narrow_procedural_task
+        profiling: false
+        article: Article 6(3)
+        refs:
+          - apps/roster/src/swap/approval.ts:52
+      enforceable_from: 2027-12-02
+      status: suggested
+      refs:
+        - apps/roster/src/swap/chat-route.ts:24
+      interpretation:
+        owner: sam.okafor@example.com
+        decided_at: 2026-08-02
+        expires_at: 2027-02-02
+        rationale: >
+          Task allocation between employees is an Annex III area, so the derogation has to be argued
+          rather than assumed. It matches a shift proposal to a rule the roster team already applies
+          by hand and stops at their approval, and it builds no profile of anyone. Suggested for
+          counsel; check the applicable date against the current text of the Regulation before
+          treating this as due.
+  standards_alignment:
+    - system: support-triage
+      scheme: nist_ai_rmf
+      value: measure
+      status: suggested
+      refs:
+        - .github/workflows/evals.yml:19
+      interpretation:
+        owner: dana.reed@example.com
+        decided_at: 2026-08-02
+        expires_at: 2027-02-02
+        rationale: >
+          CI-gated evals are the measurable half of this system's governance; tagged so the gap in
+          the other three functions is visible.
+    - system: shift-scheduler
+      scheme: iso_42001
+      value: Documented AI system information and human oversight point
+      reference: See the management system clause on operational planning and control.
+      status: suggested
+      refs:
+        - apps/roster/src/swap/approval.ts:52
+      interpretation:
+        owner: dana.reed@example.com
+        decided_at: 2026-08-02
+        expires_at: 2027-02-02
+        rationale: >
+          The approval step is the oversight the management system expects to see documented; the
+          clause reference is a citation only, since no standard text is carried in this repository.

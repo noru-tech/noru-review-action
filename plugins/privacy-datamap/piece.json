@@ -1,0 +1,186 @@
+{
+  "$schema": "../../contract/piece.schema.json",
+  "piece": "privacy-datamap",
+  "contract_version": "0.1.0",
+  "artifact": ".noru/privacy-datamap.yml",
+  "manifest_schema": "contract/privacy-datamap.schema.json",
+  "commands": {
+    "scan": "commands/scan.md",
+    "diff": "commands/diff.md",
+    "push": "commands/push.md"
+  },
+  "skill": "skills/privacy-datamap/SKILL.md",
+  "collector": {
+    "entrypoint": "scripts/collect.mjs",
+    "deterministic": true,
+    "network": false,
+    "inputs": [
+      ".noru/.cache/privacy-datamap-queue.json"
+    ]
+  },
+  "reconciler": {
+    "entrypoint": "scripts/reconcile.py",
+    "runtime": "python3-stdlib",
+    "deterministic": true,
+    "network": false
+  },
+  "validator": {
+    "entrypoint": "scripts/validate_manifest.py",
+    "runtime": "python3-stdlib",
+    "vocabulary": [
+      "references/vocabulary.json",
+      "references/classification.json",
+      "references/taxonomy/data_categories.json",
+      "references/taxonomy/data_uses.json",
+      "references/taxonomy/data_subjects.json"
+    ],
+    "suggestions": true,
+    "exit_codes": {
+      "0": "manifest is valid; warnings may be present",
+      "1": "manifest has validation errors, including a signature whose collection has changed shape and a claim already expired at --as-of",
+      "2": "usage error, unreadable file, or unparseable YAML"
+    },
+    "fixtures": {
+      "valid": [
+        "fixtures/valid.privacy-datamap.yml"
+      ],
+      "invalid": [
+        {
+          "path": "fixtures/invalid-missing-interpretation.privacy-datamap.yml",
+          "expect_message": "missing required `interpretation`"
+        },
+        {
+          "path": "fixtures/invalid-missing-refs.privacy-datamap.yml",
+          "expect_message": "every claim must cite the lines that produced it"
+        },
+        {
+          "path": "fixtures/invalid-unknown-category.privacy-datamap.yml",
+          "expect_message": "unknown fideslang data category"
+        },
+        {
+          "path": "fixtures/invalid-unknown-data-use.privacy-datamap.yml",
+          "expect_message": "unknown fideslang data use"
+        },
+        {
+          "path": "fixtures/invalid-unknown-data-subject.privacy-datamap.yml",
+          "expect_message": "unknown fideslang data subject"
+        },
+        {
+          "path": "fixtures/invalid-needs-review.privacy-datamap.yml",
+          "expect_message": "still true"
+        },
+        {
+          "path": "fixtures/invalid-dangling-dataset-reference.privacy-datamap.yml",
+          "expect_message": "is not a dataset defined in this manifest"
+        },
+        {
+          "path": "fixtures/invalid-duplicate-dataset-key.privacy-datamap.yml",
+          "expect_message": "duplicate dataset key"
+        },
+        {
+          "path": "fixtures/invalid-structure-changed.privacy-datamap.yml",
+          "expect_message": "no longer a statement about this table"
+        },
+        {
+          "path": "fixtures/invalid-no-expiry.privacy-datamap.yml",
+          "expect_message": "missing required `expires_at`"
+        },
+        {
+          "path": "fixtures/invalid-expiry-beyond-horizon.privacy-datamap.yml",
+          "expect_message": "may stand for at most"
+        },
+        {
+          "path": "fixtures/invalid-expiry-before-decision.privacy-datamap.yml",
+          "expect_message": "asserts nothing"
+        },
+        {
+          "path": "fixtures/invalid-special-category-horizon.privacy-datamap.yml",
+          "expect_message": "may stand for at most"
+        }
+      ]
+    }
+  },
+  "push": {
+    "entrypoint": "scripts/push.mjs",
+    "mode": "single_call",
+    "operations": [
+      {
+        "name": "ingestDatamap",
+        "transport": "mcp",
+        "scope": "write:datamaps",
+        "idempotency": {
+          "kind": "server_upsert",
+          "key": [
+            "slug"
+          ],
+          "verified_at": "The \"Idempotency/Upsert Behavior\" section of https://api.noru.tech/llms.txt states that for `POST /v1/privacy/datamaps` and the ingestDatamap MCP tool, the write is keyed on `slug` within the organization: identical content is a no-op, and a changed manifest is upserted \u2014 each system, dataset and processing activity it names is created or updated in place on its `fides_key`, and anything the manifest no longer names is soft-archived rather than deleted, so a push replaces the data map for that slug rather than merging into it. The endpoint's own description repeats it, and so does the ingestDatamap tool description published by https://api.noru.tech/v1/mcp. The same section records that the content checksum excludes `commitSha` and `branch`, which is what makes re-pushing unchanged content from a new commit a no-op rather than a re-materialization."
+        }
+      }
+    ],
+    "provenance": {
+      "slug": true,
+      "commit_sha": true,
+      "branch": true
+    },
+    "diff_required": true,
+    "requires_confirmation": true
+  },
+  "scopes": {
+    "read": [
+      "read:organization",
+      "read:datamaps"
+    ],
+    "write": [
+      "write:datamaps"
+    ]
+  },
+  "queue": {
+    "source": [
+      {
+        "kind": "repository",
+        "note": "The schemas, models, migrations and API contracts the repository actually contains. This half of the queue is repo-resident truth: no server-side integration can see which columns exist on a branch that has not merged, and no API key can read a migration."
+      },
+      {
+        "kind": "mcp_tool",
+        "tool": "getPrivacyTaxonomy",
+        "note": "The vocabulary Noru itself holds. The bundled snapshot under references/taxonomy/ is the offline floor required by requirement 3; where the piece can reach Noru it reconciles against this and reports a difference rather than silently preferring what is on disk."
+      },
+      {
+        "kind": "mcp_tool",
+        "tool": "getPrivacyDataMap",
+        "note": "What the organization's data map already says, so :diff shows a real change set instead of reporting an established data map as entirely new."
+      },
+      {
+        "kind": "mcp_tool",
+        "tool": "listPrivacyDatasets",
+        "note": "The datasets Noru already holds for this source, so a collection that moved between stores reads as a move rather than as a deletion and an unrelated creation."
+      }
+    ],
+    "hardcoded_expectations": false
+  },
+  "interpretation": {
+    "required": true,
+    "level": "per_claim",
+    "unattributed": "error"
+  },
+  "ci": {
+    "output_json": true,
+    "quiet": true,
+    "validate": { "runtime": "python3", "entrypoint": "scripts/validate_manifest.py", "arguments": ["{manifest}", "--output=json", "--quiet"] },
+    "drift_check": { "runtime": "node", "entrypoint": "scripts/collect.mjs", "arguments": ["--repo={repo}", "--check", "--output=json", "--quiet"] },
+    "watch_paths": ["**/*.sql", "**/*.prisma", "**/*.py", "**/*.proto", "**/*.graphql", "**/*.gql", ".noru/privacy-datamap.yml"],
+    "exit_codes": {
+      "0": "success",
+      "1": "drift, validation failure, an unresolved needs_review claim, or a stale plan",
+      "2": "usage error, including a push without --confirm"
+    }
+  },
+  "outputs": [
+    {
+      "path": ".fides/datamap.yml",
+      "purpose": "The data map in Ethyca's own on-disk format, for the `fides` CLI and anything else that reads a Fides manifest. It is not the manifest: `.noru/privacy-datamap.yml` carries the citations, the attribution and the review state, and is what `:push` is bound to; this is that content projected down to plain Fideslang with the piece's own bookkeeping removed. Keeping the conventional path is the whole point \u2014 a data map the ecosystem's tooling cannot read is a data map that only Noru can use.",
+      "format": "fideslang",
+      "rendered_from_validated_manifest": true
+    }
+  ]
+}

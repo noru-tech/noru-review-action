@@ -1,0 +1,46 @@
+{
+  "name": "noru",
+  "version": "0.7.1",
+  "description": "Run consolidated repository reviews and read-only Noru status across independently installed GRC pieces.",
+  "author": {
+    "name": "Noru",
+    "email": "support@noru.tech",
+    "url": "https://noru.tech"
+  },
+  "homepage": "https://github.com/noru-tech/noru-grc-engineering",
+  "repository": "https://github.com/noru-tech/noru-grc-engineering",
+  "license": "MIT",
+  "keywords": [
+    "noru",
+    "compliance",
+    "grc",
+    "mcp",
+    "hub",
+    "audit"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Noru GRC Engineering",
+    "shortDescription": "Find and run the right last-mile GRC work for a repository.",
+    "longDescription": "The hub for Noru's last-mile GRC pieces. It discovers independently installed pieces, runs consolidated branch reviews, reports live Noru work requiring attention with read scopes only, verifies the connection and local toolchain, and gathers the provenance every piece reuses.",
+    "developerName": "Noru",
+    "category": "Productivity",
+    "capabilities": [
+      "Local read: repository, branch diff, manifests and toolchain",
+      "Local write: none during triage or branch review",
+      "Noru read: organization and enabled-framework connection checks",
+      "Noru write: none",
+      "Noru MCP connection check",
+      "Least-privilege scope reporting",
+      "Read-only repository triage",
+      "Read-only branch review with explicit piece selection",
+      "Read-only consolidated Noru status with per-section scope degradation",
+      "GRC piece routing",
+      "Repository provenance",
+      "Shared diff and plan helpers"
+    ],
+    "websiteURL": "https://noru.tech",
+    "defaultPrompt": "Review this repository for local GRC work. Identify which Noru pieces are relevant, explain why with file citations, and recommend the smallest useful read-only next step. Do not write to Noru."
+  }
+}

@@ -1,0 +1,47 @@
+{
+  "name": "privacy-datamap",
+  "version": "0.7.1",
+  "description": "Read the schemas a repository actually contains — ORM models, migrations, SQL DDL, API contracts — classify the personal data in them against the Fideslang taxonomy, and land the data map in Noru with a citation for every field and a named owner for every judgement.",
+  "author": {
+    "name": "Noru",
+    "email": "support@noru.tech",
+    "url": "https://noru.tech"
+  },
+  "homepage": "https://github.com/noru-tech/noru-grc-engineering",
+  "repository": "https://github.com/noru-tech/noru-grc-engineering",
+  "license": "MIT",
+  "keywords": [
+    "noru",
+    "compliance",
+    "privacy",
+    "fides",
+    "fideslang",
+    "data-map",
+    "ropa",
+    "gdpr",
+    "data-governance"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Privacy Datamap",
+    "shortDescription": "Build a privacy data map from a repository's schemas",
+    "longDescription": "Reads the schemas a repository contains, classifies the personal data in them against the bundled Fideslang taxonomy, and lands the result in Noru as a privacy data map. Every field carries the file:line it came from; anything the classifier cannot resolve is raised for a human rather than guessed, and a manifest with unresolved items cannot be pushed.",
+    "developerName": "Noru",
+    "category": "Productivity",
+    "capabilities": [
+      "Local read: schemas, models, migrations and API contracts",
+      "Local write: .noru/privacy-datamap.yml, .fides/datamap.yml and machine-only cache files",
+      "Noru read: organization, taxonomy and existing privacy data map",
+      "Noru write: privacy data map only after diff and confirmation",
+      "Fideslang classification with file and line provenance",
+      "Special-category data and unresolved-decision reporting"
+    ],
+    "websiteURL": "https://noru.tech",
+    "defaultPrompt": [
+      "Build a privacy data map for this repository. Do not push or write to Noru.",
+      "What personal data does this codebase hold, and where? Do not push or write to Noru.",
+      "Generate a Fideslang manifest for this repo. Do not push or write to Noru."
+    ]
+  }
+}
