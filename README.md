@@ -5,8 +5,8 @@
 > `scripts/publish_actions.py` on every release: do not edit it here, changes land upstream
 > and the next release overwrites this tree. Issues: https://github.com/noru-tech/noru-grc-engineering/issues
 >
-> `uses: noru-tech/noru-review-action@v0.7.4` and
-> `uses: noru-tech/noru-grc-engineering/.github/actions/noru-review@v0.7.4`
+> `uses: noru-tech/noru-review-action@v0.7.5` and
+> `uses: noru-tech/noru-grc-engineering/.github/actions/noru-review@v0.7.5`
 > are the same code at the same version. The toolkit the action runs (`scripts/`,
 > `plugins/`, `contract/`) is copied verbatim from that tag. `@v0`
 > follows the newest 0.x release.
@@ -34,7 +34,7 @@ absent, such as a queue-driven piece on a fork, is reported as `skipped`, never 
 
 ## Usage
 
-The [supported template](https://github.com/noru-tech/noru-grc-engineering/blob/v0.7.4/templates/github/noru-grc-review.yml) is the recommended start.
+The [supported template](https://github.com/noru-tech/noru-grc-engineering/blob/v0.7.5/templates/github/noru-grc-review.yml) is the recommended start.
 Copy it to `.github/workflows/noru-grc-review.yml`:
 
 ```yaml
@@ -161,13 +161,13 @@ when you choose to, pin a release tag from
 SHA. `noru-tech/noru-review-action@<tag>` — the path inside the
 source repository — is the same code at the same tag; the Marketplace repository is generated from
 it on every release. Every plugin and action in the toolkit shares one version number, listed in
-the [changelog](https://github.com/noru-tech/noru-grc-engineering/blob/v0.7.4/CHANGELOG.md).
+the [changelog](https://github.com/noru-tech/noru-grc-engineering/blob/v0.7.5/CHANGELOG.md).
 
 ## Support and contributing
 
 The end-to-end rollout, from installing the pieces to the separate publication step, is in
-[developer onboarding](https://github.com/noru-tech/noru-grc-engineering/blob/v0.7.4/docs/developer-onboarding.md). The action is built and tested in
+[developer onboarding](https://github.com/noru-tech/noru-grc-engineering/blob/v0.7.5/docs/developer-onboarding.md). The action is built and tested in
 [`noru-tech/noru-grc-engineering`](https://github.com/noru-tech/noru-grc-engineering), which
-also holds the [contribution guide](https://github.com/noru-tech/noru-grc-engineering/blob/v0.7.4/CONTRIBUTING.md) and the
-[security policy](https://github.com/noru-tech/noru-grc-engineering/blob/v0.7.4/SECURITY.md). Open issues and pull requests there, not in the
+also holds the [contribution guide](https://github.com/noru-tech/noru-grc-engineering/blob/v0.7.5/CONTRIBUTING.md) and the
+[security policy](https://github.com/noru-tech/noru-grc-engineering/blob/v0.7.5/SECURITY.md). Open issues and pull requests there, not in the
 Marketplace repository, whose tree is overwritten on every release.
