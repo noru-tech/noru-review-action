@@ -5,8 +5,8 @@
 > `scripts/publish_actions.py` on every release: do not edit it here, changes land upstream
 > and the next release overwrites this tree. Issues: https://github.com/noru-tech/noru-grc-engineering/issues
 >
-> `uses: noru-tech/noru-review-action@v0.7.2` and
-> `uses: noru-tech/noru-grc-engineering/.github/actions/noru-review@v0.7.2`
+> `uses: noru-tech/noru-review-action@v0.7.3` and
+> `uses: noru-tech/noru-grc-engineering/.github/actions/noru-review@v0.7.3`
 > are the same code at the same version. The toolkit the action runs (`scripts/`,
 > `plugins/`, `contract/`) is copied verbatim from that tag. `@v0`
 > follows the newest 0.x release.
