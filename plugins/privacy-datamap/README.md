@@ -1,33 +1,42 @@
 # privacy-datamap
 
-> Read the schemas a repository actually contains, classify the personal data in them against
-> the Fideslang taxonomy, and land the data map in Noru — with a citation for every field and a
-> named owner for every judgement.
+> Read the persistent structures a repository actually establishes, classify the personal data in them against
+> the Fideslang taxonomy, and land the data map in Noru — with complete cited structural facts and
+> a named owner for every judgement.
 
 ## Commands
 
 | Command | Writes to Noru? | What it does |
 |---|---|---|
-| `/privacy-datamap:scan` | no | Reads the repository's schemas → `.noru/privacy-datamap.yml` — and, once that manifest validates, renders `.fides/datamap.yml` |
+| `/privacy-datamap:scan` | no | Reads schemas and evidence-backed supplemental stores → `.noru/privacy-datamap.yml` — and, once that manifest validates, renders `.fides/datamap.yml` |
 | `/privacy-datamap:diff` | no | Reads current state, prints the exact plan |
 | `/privacy-datamap:push` | **yes** | Executes the confirmed plan |
 
 `scan` now has two deterministic local phases. `collect.mjs` observes the repository; then
 `reconcile.py` compares those observations with the last accepted lock. The reconciler emits the
 small set of new or materially changed ambiguous fields that need agent analysis. It never calls a
-model itself, and unchanged fields are never reclassified.
+model itself, and unchanged fields are never reclassified. The agent inspects repository context,
+groups proposals by collection, and asks the user only about genuine ambiguities, amendments and
+the accountable owner rather than handing over the raw structural inventory.
 
 ## What it reads
 
 | Format | Files | What it takes |
 |---|---|---|
-| SQL DDL | `*.sql` (schemas, migrations) | `CREATE TABLE` → collection, each column → field |
+| SQL DDL | `*.sql` (schemas, migrations) | declarative `CREATE TABLE`, or ordered migration replay for the supported operations below |
+| Drizzle | `*.ts`, `*.tsx`, `*.js`, `*.jsx` | common multiline `pgTable`, `mysqlTable` and `sqliteTable` declarations, including nested builder calls |
 | Prisma | `*.prisma` | `model` → collection, each field |
 | Python ORM | `*.py` | Django `models.Model` and SQLAlchemy declarative classes; an attribute assigned from `Column(...)`, `mapped_column(...)` or a `*Field(...)` call |
 | Protobuf | `*.proto` | `message` → collection, each numbered field |
 | GraphQL SDL | `*.graphql`, `*.gql`, `*.graphqls` | `type` and `input` → collection, each field |
+| Supplemental stores | `.noru/privacy-datamap-stores.json` | explicitly declared object stores, queues, search indexes and third-party stores; every field needs its own repository citation |
 
-**Not read yet**: OpenAPI and JSON Schema, TypeORM and Sequelize entities, Drizzle tables, Mongoose
+Drizzle parsing is deliberately static: literal table names and object-literal column maps are
+supported, including comments between field declarations. Spreads, shorthand properties and
+declarations assembled through runtime values are reported as `drizzle` coverage rather than
+silently treated as a complete table or executed.
+
+**Not read automatically yet**: OpenAPI and JSON Schema, TypeORM and Sequelize entities, Mongoose
 schemas, ActiveRecord, Ecto, GORM structs, and TypeScript or Zod DTOs. A repository whose schema
 lives only in one of those produces an empty data map, which is not the same as having no personal
 data in it.
@@ -55,6 +64,101 @@ real, which is why they stay on the list.
 The marker is a deterministic text match, never an attempt to read the schema — the honest output is
 "there is one here and I cannot see inside it". A shape nobody has written a marker for is still
 invisible, so this table is still the thing to read before trusting a small result.
+
+## From observations to logical topology
+
+A parsed file is a structural **observation**, not automatically a dataset. The collector groups
+schema files under their nearest datastore boundary and merges tables contributed by multiple
+declarative files. The complete current fields and file-shaped observations remain in
+`.noru/.cache/privacy-datamap.derived.json` with their citations. New fields stay visible in the
+review candidate. Once the collection decision is accepted, non-personal names move to a compact
+collection-level `non_personal_fields` list without leaving the derived facts or accepted lock.
+
+Tracked `drizzle.config.ts`, `.js`, `.mts`, `.cts`, `.mjs` and `.cjs` files provide an explicit
+cross-directory topology edge when `schema` and `out` use static paths. Both paths are resolved
+relative to the config. Schema observations keep
+the canonical schema boundary and the generated SQL output joins it as migration history. A table
+name shared by two stores is never enough to merge them; only the config link is.
+
+Declarative schemas are the current-state authority when they share a boundary with migrations.
+That includes Drizzle, Prisma, Django/SQLAlchemy and standalone SQL schemas. Historical migrations
+remain as observations but do not produce duplicate datasets or fields. A migration-only datastore
+is replayed in lexical path order. The supported structural subset is:
+
+- `CREATE TABLE`
+- `ALTER TABLE ... ADD COLUMN`, `DROP COLUMN`, and `RENAME COLUMN ... TO ...`
+- `ALTER TABLE ... RENAME TO ...`
+- `DROP TABLE`
+
+Drizzle's `--> statement-breakpoint` marker is only a delimiter. Table-level foreign-key, check,
+unique and primary-key constraints are inventory-neutral and do not create migration gaps. The SQL
+parser reads column declarations only at the top level of `CREATE TABLE`, so multiline `CHECK`
+expressions cannot become fields.
+
+For a migration-only datastore, a structural statement outside that subset or one that references
+missing state omits the datastore from the logical map and appears under
+`coverage.migration_gaps`; the collector does not guess a partial current state. When a canonical
+schema exists, it remains authoritative: migrations stay in the audit observations, but replay
+limitations are not current coverage gaps. Conflicting canonical field shapes remain blocking
+`coverage.schema_conflicts`. CI reports current coverage gaps alongside unsupported formats.
+
+Dataset, collection and field identities come from the logical datastore boundary and schema
+names, not migration filenames. Normalized-key collisions are checked before any manifest is
+written and fail with both colliding boundaries. This also means a hidden directory such as
+`.example` becomes `example`, never an empty key that silently falls back to `repository`.
+
+Systems use a separate evidence pass. Package metadata alone is weak evidence and creates no
+system. A runtime boundary needs a container or deployment definition, a Kubernetes workload, a
+server/worker entrypoint, or an executable start/deploy script that points to an application
+entrypoint. Libraries and tooling packages therefore stay out of the topology. If none of those
+signals exists, the collector emits one conservative repository-level system. Runtime discovery
+ignores markers inside conventional test, fixture and example directories. It
+does not infer purpose, data use, subjects, or access to a datastore outside the runtime's own
+directory; those remain human review decisions.
+
+Runtime discovery ignores conventional test and fixture directories, including `__tests__` and
+`__fixtures__`, plus `*.test.*` and `*.spec.*` files. A server-like call in test support code is not
+evidence of a deployed system.
+
+## Stores without a declarative schema
+
+SDK initialization or a bucket, queue, index or third-party client call can show that a store
+exists, but it cannot show which object fields the repository persists. The collector therefore
+never invents a dataset or fields from a client call alone. For structures that cannot be derived
+safely, commit `.noru/privacy-datamap-stores.json`, validated by
+[`contract/privacy-datamap-stores.schema.json`](../../contract/privacy-datamap-stores.schema.json).
+
+Each datastore and collection cites the integration or contract that establishes it. Every field
+also carries an `evidence_kind` and its own repository `file:line` citation. Accepted evidence kinds
+are `typed_contract`, `serializer`, `upload_payload` and `download_result`; a citation to the
+supplement itself is rejected. Optional `system_references` attach the datastore to system keys
+that runtime discovery actually found. Invalid citations, unknown system keys, duplicate identities
+and untracked supplements fail the scan instead of creating a guessed map.
+
+```json
+{
+  "$schema": "https://raw.githubusercontent.com/noru-tech/noru-grc-engineering/v0/contract/privacy-datamap-stores.schema.json",
+  "version": "1.0.0",
+  "datastores": [{
+    "fides_key": "customer_objects",
+    "name": "Customer object storage",
+    "store_type": "object_storage",
+    "provider": "gcs",
+    "refs": ["src/storage.ts:18"],
+    "system_references": ["src"],
+    "collections": [{
+      "name": "uploaded_files",
+      "refs": ["src/storage.ts:5"],
+      "fields": [{
+        "name": "object_key",
+        "shape": "string",
+        "evidence_kind": "typed_contract",
+        "refs": ["src/storage.ts:6"]
+      }]
+    }]
+  }]
+}
+```
 
 ## What it scans
 
@@ -117,21 +221,35 @@ On later scans `scripts/reconcile.py` compares every current field with that obs
 | new or structurally changed exact-table field | classify deterministically; re-sign the collection |
 | new or structurally changed ambiguous field | add only that field to the agent proposal queue |
 | removed field | remove it from the candidate; re-sign the collection |
+| unique logical-identity migration | carry the decision forward under the new datastore key |
 
 The reconciler writes `.noru/.cache/privacy-datamap.reconciliation.json`,
 `.noru/.cache/privacy-datamap.proposals.json` and
-`.noru/.cache/privacy-datamap.candidate.yml`. They are working files and must not be committed. The
-candidate never overwrites the accepted manifest. After the candidate has been resolved and
-reviewed, `reconcile.py --seal` refuses to write the lock unless the manifest is valid and matches
-the current observations.
+`.noru/.cache/privacy-datamap.candidate.yml`. It also writes
+`.noru/.cache/privacy-datamap.review.md`, a compact index grouped by collection and syntactic field
+family so the detailed proposal JSON is not the user interface. These are working files and must
+not be committed. The candidate never overwrites the accepted manifest. In bootstrap mode an
+invalid manifest contributes no descriptions, systems, declarations or references to the
+candidate. After the candidate has been resolved and reviewed, `reconcile.py --seal` refuses to
+write the lock unless the manifest is valid and matches the current observations.
 
 A valid manifest from a release before locks existed enters migration mode. Its decisions are
 carried forward and its first lock is seeded without sending every field back through an agent.
+When a normalized identity replaces an older file-derived identity, maintenance mode matches only
+one-to-one candidates with the same collection and field, a compatible normalized scalar type
+family (for example SQL `TEXT` and a Drizzle `text(...)` builder), and supporting source scope.
+Ambiguous candidates appear in `identity_ambiguities` and are left for review; the
+reconciler never chooses one by similarity alone. The first normalized release can change dataset
+keys in the downstream diff even when field decisions carry forward, so review the dataset-level
+create/archive plan before pushing.
 
 The claim unit is the **collection**, not the field. One person signs for "these are the categories
 in this table"; per-field attribution would mean five hundred interpretation blocks on a
 five-hundred-column schema, which is a form nobody fills in. Field-level uncertainty still shows,
-as `needs_review` flags inside the collection that block the push.
+as `needs_review` flags inside the collection that block the push. Proposed personal,
+non-personal, ambiguous and special-category fields are reviewed as a collection group; accepting
+the non-personal group moves those names to `non_personal_fields` without removing them from the
+structural audit trail.
 
 Special-category data — GDPR Article 9, plus Article 10 criminal-offence data — is collected into
 its own list so a reviewer never has to go looking for the highest-risk thing in the map.
@@ -140,9 +258,9 @@ its own list so a reviewer never has to go looking for the highest-risk thing in
 
 Two things anchor a claim, and the pair is the point.
 
-**`structure_digest` pins what a signature was given for.** Every collection carries a digest of its
-field *names* — not their categories — so resolving a classification keeps the signature, and adding,
-removing or renaming a column breaks it:
+**`structure_digest` pins what a signature was given for.** Every collection carries a digest of the
+union of its verbose field names and compact `non_personal_fields` — not their categories — so
+compacting a decision keeps the signature, and adding, removing or renaming a column breaks it:
 
 ```
 ERROR dataset[0].collections[0].structure_digest: does not match this collection's fields
@@ -151,8 +269,9 @@ ERROR dataset[0].collections[0].structure_digest: does not match this collection
       Re-run :scan, review what changed, and sign again
 ```
 
-The validator recomputes it rather than trusting the stamp, so editing the fields and editing the
-digest by hand are caught by the same check.
+The validator recomputes it rather than trusting the stamp and, when current derived facts are
+present, compares that union with the complete observed collection. Compacting the review file
+therefore cannot hide a field from drift detection.
 
 **`expires_at` pins how long nobody has looked.** Required, and measured from `decided_at`:
 
@@ -197,6 +316,11 @@ tools this piece reads. `write:datamaps` is documented as "Push fideslang privac
 
 ## Artifacts
 
+`.noru/privacy-datamap-stores.json`, schema at
+[`contract/privacy-datamap-stores.schema.json`](../../contract/privacy-datamap-stores.schema.json),
+is an optional committed structural input for stores that no supported schema describes. It is
+reviewed source, not generated output.
+
 `.noru/privacy-datamap.yml`, schema at [`contract/privacy-datamap.schema.json`](../../contract/privacy-datamap.schema.json).
 
 Commit it — it is the reviewable artifact. Keep `.noru/.cache/` out of git.
@@ -212,12 +336,13 @@ by hand.
 anything else that reads a Fides manifest.
 
 The two are not the same file and not interchangeable. `.noru/privacy-datamap.yml` is the
-**manifest**: it carries the `file:line` citation behind every field, the interpretation block
-behind every judgement, and the `needs_review` flags that block a push. `.fides/datamap.yml` is
-that content projected down to plain Fideslang with the piece's own bookkeeping stripped out, and
-it is only ever written from a manifest that validated against the repository as it stands right
-now. Edit the manifest, never the export: the next scan overwrites the export and will not warn
-you, because it has no way to tell your edit from its own output.
+**manifest**: it carries citations for review-bearing fields, compact non-personal names, the
+interpretation block behind every judgement, and the `needs_review` flags that block a push.
+Complete citations and shapes remain in derived facts and the accepted lock. `.fides/datamap.yml`
+contains only privacy-relevant fields: non-personal leaves and empty collections or datasets are
+removed, and system references are restricted to retained datasets. It is only ever written from a
+manifest that validated against the repository as it stands right now. Edit the manifest, never the
+export: the next scan overwrites the export and will not warn you.
 
 ## Idempotency
 
