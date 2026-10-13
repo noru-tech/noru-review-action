@@ -34,6 +34,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import dependencies
 import relationships
 import analysis_cache
+import dataset_inputs
 
 # --- BEGIN VENDORED yaml_mini ---
 # Canonical copy: contract/lib/yaml_mini.py. Every piece validator embeds this block verbatim so
@@ -387,22 +388,24 @@ FIDES_KEY_RE = re.compile(r"^[A-Za-z0-9_.<>-]+$")
 SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+$")
 DIGEST_RE = re.compile(r"^[0-9a-f]{64}$")
 
-TOP_LEVEL_KEYS = {"version", "piece", "source", "dataset", "system", "evidence_dependencies", "relationship_graph"}
+import migration_support
+
+TOP_LEVEL_KEYS = {"migration_support", "version", "piece", "source", "dataset", "system", "evidence_dependencies", "relationship_graph"}
 SOURCE_KEYS = {"slug", "commit_sha", "branch", "generated_by", "derived_digest"}
 INTERPRETATION_KEYS = {"owner", "decided_at", "expires_at", "rationale", "refs"}
-DATASET_KEYS = {"fides_key", "name", "description", "collections"}
+DATASET_KEYS = {"fides_key", "name", "description", "collections", "meta"}
 COLLECTION_KEYS = {
     "name", "description", "refs", "interpretation", "needs_review", "fields",
     "non_personal_fields", "structure_digest",
 }
-FIELD_KEYS = {"name", "description", "data_categories", "refs", "needs_review", "fields"}
+FIELD_KEYS = {"name", "description", "data_categories", "refs", "needs_review", "fields", "meta"}
 SYSTEM_KEYS = {
     "fides_key", "name", "description", "system_type", "dataset_references",
-    "privacy_declarations",
+    "privacy_declarations", "meta", "ingress", "egress",
 }
 DECLARATION_KEYS = {
     "name", "data_use", "data_categories", "data_subjects", "refs", "interpretation",
-    "needs_review",
+    "needs_review", "ingress", "egress",
 }
 
 
@@ -800,6 +803,17 @@ def check_systems(rep, doc, vocab, dataset_keys, counts, as_of):
                         + suggest(str(ref), dataset_keys),
                     )
 
+        for direction in ("ingress", "egress"):
+            flows = system.get(direction, [])
+            if not isinstance(flows, list):
+                rep.err(f"{path}.{direction}", "must be a list")
+                continue
+            for flow in flows:
+                if not isinstance(flow, dict) or set(flow) - {"fides_key", "type", "data_categories"} or flow.get("type") != "system" or flow.get("fides_key") not in {s.get("fides_key") for s in systems if isinstance(s, dict)}:
+                    rep.err(f"{path}.{direction}", "flow must reference a system defined in this manifest")
+                elif not isinstance(flow.get("data_categories", []), list) or any(c not in vocab["data_categories"] for c in flow.get("data_categories", [])):
+                    rep.err(f"{path}.{direction}", "flow contains invalid data categories")
+
         declarations = system.get("privacy_declarations")
         if declarations is None:
             rep.err(f"{path}.privacy_declarations", "missing required `privacy_declarations`")
@@ -815,6 +829,10 @@ def check_systems(rep, doc, vocab, dataset_keys, counts, as_of):
             check_unknown_keys(rep, dpath, decl, DECLARATION_KEYS)
             if not decl.get("name"):
                 rep.err(f"{dpath}.name", "missing required `name` — say what this processing is for")
+            for direction in ("ingress", "egress"):
+                links = decl.get(direction, [])
+                if not isinstance(links, list) or any(link not in {s.get("fides_key") for s in systems if isinstance(s, dict)} for link in links):
+                    rep.err(f"{dpath}.{direction}", "must list systems defined in this manifest")
             use = decl.get("data_use")
             if not use:
                 rep.err(f"{dpath}.data_use", "missing required `data_use`")
@@ -837,6 +855,8 @@ def check_systems(rep, doc, vocab, dataset_keys, counts, as_of):
                             + suggest(str(subject), vocab["data_subjects"]),
                         )
             cats = check_categories(rep, dpath, decl, vocab)
+            if not cats:
+                rep.err(f"{dpath}.data_categories", "identify the data categories used for this processing purpose before acceptance")
             check_refs(rep, dpath, decl)
             check_interpretation(rep, dpath, decl)
             block = decl.get("interpretation")
@@ -891,14 +911,14 @@ def check_observed_structure(rep, doc, derived):
             rep.err("dataset", f"manifest collection '{identity}' is not in the current observation")
             continue
         missing = sorted(observed[identity] - represented[identity])
-        extra = sorted(represented[identity] - observed[identity])
+        extra = sorted(name for name in represented[identity] - observed[identity] if not any(name.startswith(parent + ".") for parent in observed[identity]))
         if missing:
             rep.err(identity, f"observed field(s) missing from fields/non_personal_fields: {', '.join(missing)}")
         if extra:
             rep.err(identity, f"unobserved field(s) present in fields/non_personal_fields: {', '.join(extra)}")
 
 
-def validate(doc, vocab, as_of=None, observed=None, repo=None, allow_discovery_review=False):
+def validate(doc, vocab, as_of=None, observed=None, repo=None, allow_discovery_review=False, allow_semantic_review=False):
     rep = Report()
     counts = {
         "datasets": 0,
@@ -923,9 +943,15 @@ def validate(doc, vocab, as_of=None, observed=None, repo=None, allow_discovery_r
         rep.err("piece", f"expected '{PIECE}', found '{doc.get('piece')}'")
 
     check_source(rep, doc)
+    for error in migration_support.errors(doc.get("migration_support", [])):
+        rep.err("migration_support", error)
+    for error in dataset_inputs.dependency_gaps(doc):
+        rep.err("evidence_dependencies", error)
     dataset_keys = check_datasets(rep, doc, vocab, counts, as_of)
     check_systems(rep, doc, vocab, dataset_keys, counts, as_of)
     if isinstance(observed, dict):
+        if doc.get("migration_support", []) != observed.get("migration_support", []):
+            rep.err("migration_support", "source-role declarations differ from collected evidence; rerun collection")
         check_observed_structure(rep, doc, observed)
     if "relationship_graph" in doc:
         for error in relationships.validate(doc["relationship_graph"], doc.get("evidence_dependencies", [])):
@@ -958,13 +984,34 @@ def validate(doc, vocab, as_of=None, observed=None, repo=None, allow_discovery_r
                 rep.err("discovery", f"{change['path']}: investigate new code/configuration scope and seal the reviewed baseline before export")
         except (OSError, ValueError, TypeError, KeyError) as error:
             rep.err("discovery", f"cannot verify discovery baseline: {error}")
+    if repo is not None and not allow_semantic_review:
+        try:
+            lock_path = pathlib.Path(repo) / ".noru" / "privacy-datamap.lock.json"
+            lock = json.loads(lock_path.read_text()) if lock_path.is_file() else {}
+            if analysis_cache.semantic_changes(lock.get("semantic_snapshot"), analysis_cache.semantic_snapshot(doc)):
+                rep.err("semantic_review", "privacy meaning narrowed: investigate, review and seal the changed baseline before export")
+        except (OSError, ValueError, TypeError, KeyError) as error:
+            rep.err("semantic_review", f"cannot verify accepted meaning: {error}")
+    if repo is not None:
+        try:
+            import field_review
+            import analysis_storage
+            classification_document = analysis_storage.load(pathlib.Path(repo) / ".noru/.cache/privacy-datamap.analysis.json") or {}
+            classification_observed = observed or field_review.derived_for(classification_document, repo)
+            if classification_observed is None:
+                rep.err("classification_review", "Current classification observations are missing; recollect and investigate before acceptance or export")
+            else:
+                for error in field_review.validate_repository(classification_document, classification_observed, pathlib.Path(repo), require_complete=True, candidate=doc):
+                    rep.err("classification_review", error)
+        except (OSError, ValueError, TypeError, KeyError) as error:
+            rep.err("classification_review", "Cannot verify canonical classification: " + str(error))
     counts["datasets"] = len(doc.get("dataset") or [])
     return rep, counts
 
 
 USAGE = (
     "usage: validate_manifest.py <manifest.yml> [--as-of=YYYY-MM-DD] [--output=json] [--quiet] "
-    "[--emit-parsed=<path.json>]\n"
+    "[--emit-parsed=<path.json> | --schema-only]\n"
 )
 
 
@@ -972,6 +1019,7 @@ def main(argv):
     output_json = False
     quiet = False
     emit_parsed = None
+    schema_only = False
     as_of = None
     positional = []
     for arg in argv:
@@ -983,6 +1031,8 @@ def main(argv):
             quiet = True
         elif arg.startswith("--emit-parsed="):
             emit_parsed = arg.split("=", 1)[1]
+        elif arg == "--schema-only":
+            schema_only = True
         elif arg.startswith("--as-of="):
             as_of = parse_date(arg.split("=", 1)[1])
             if as_of is None:
@@ -1000,6 +1050,9 @@ def main(argv):
         else:
             positional.append(arg)
 
+    if schema_only and emit_parsed is not None:
+        sys.stderr.write("error: --schema-only cannot emit exportable parsed output; use repository validation for acceptance/export\n")
+        return 2
     if len(positional) != 1:
         sys.stderr.write(USAGE)
         return 2
@@ -1020,14 +1073,14 @@ def main(argv):
 
     observed = None
     derived_path = path.parent / ".cache" / "privacy-datamap.derived.json"
-    if derived_path.is_file():
+    if not schema_only and derived_path.is_file():
         try:
             observed = json.loads(derived_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
             sys.stderr.write(f"error: could not load current derived facts ({exc})\n")
             return 2
 
-    rep, counts = validate(doc, vocab, as_of, observed, path.resolve().parent.parent)
+    rep, counts = validate(doc, vocab, as_of, observed, None if schema_only else path.resolve().parent.parent)
     ok = not rep.errors
 
     if ok and emit_parsed:
@@ -1047,6 +1100,7 @@ def main(argv):
                 {
                     "piece": PIECE,
                     "manifest": str(path),
+                    "scope": "schema_only" if schema_only else "repository_classification",
                     "ok": ok,
                     "loader": loader,
                     "counts": counts,
@@ -1062,6 +1116,8 @@ def main(argv):
 
     if not quiet:
         print(f"(parsed with {loader})")
+        if schema_only:
+            print("Schema-only validation: this does not validate classification or permit acceptance/export.")
         for p, m in rep.warnings:
             print(f"  WARN  {p}: {m}")
     for p, m in rep.errors:
