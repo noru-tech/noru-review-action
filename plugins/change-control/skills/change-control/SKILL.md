@@ -1,6 +1,6 @@
 ---
 name: change-control
-version: 0.12.2
+version: 0.13.0
 description: Account for who wrote, approved, merged and deployed each change over one window, with every segregation-of-duties violation owned by a named person. Use when the user asks about change management, segregation or separation of duties, "can someone approve their own code", access to production, SOC 2 CC8.1, ISO 27001 A.8.31/A.8.32, or evidence that code review actually happened.
 ---
 
@@ -41,6 +41,13 @@ Contract requirement 2 forbids a collector from opening a socket, and who approv
 not in any file. So the credentialed half is a separate entrypoint that you run, and the collector
 reads what it left behind — the same arrangement `review-signoff` uses for its review queue. One
 collector serves every forge; a new forge is a new exporter.
+
+Where agent-change-control already runs, `scripts/export/acc.mjs` turns its manifest into the same
+input, offline. acc's verdicts then decide `approver_is_author` (ACC002),
+`merged_without_independent_approval` (ACC003), `agent_change_without_independent_human` (ACC001) and,
+when acc assessed it, `bypass_used` (ACC005); `deployer_is_author` is always computed here. Do not
+recompute a rule acc decided, and do not argue with its verdict in an exception: an acc `unknown` is a
+question for the person who owns the exception, not a pass.
 
 On a fork pull request there is no token, so there is no export, so CI mode reports this piece as
 `skipped` rather than `pass`. That is honest and it is the ceiling.

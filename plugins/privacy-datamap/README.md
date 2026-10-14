@@ -25,6 +25,7 @@ for business context or accountable acceptance.
 | SQL DDL | current `*.sql` schemas | declarative `CREATE TABLE`; recognized migrations are excluded |
 | Drizzle | `*.ts`, `*.tsx`, `*.js`, `*.jsx` | common multiline `pgTable`, `mysqlTable` and `sqliteTable` declarations, including nested builder calls |
 | Prisma | `*.prisma` | `model` → collection, each field |
+| C#/.NET | `*.cs` and project metadata | bounded persisted model/property extraction and modeled EF, MongoDB, DynamoDB and literal typed SQL bindings; [support and limits](references/dotnet-support.md) |
 | Python ORM | `*.py` | Django `models.Model` and SQLAlchemy declarative classes; an attribute assigned from `Column(...)`, `mapped_column(...)` or a `*Field(...)` call |
 | Protobuf | `*.proto` | `message` → collection, each numbered field |
 | GraphQL SDL | `*.graphql`, `*.gql`, `*.graphqls` | `type` and `input` → collection, each field |
@@ -87,8 +88,10 @@ filenames. Static Drizzle `out` paths exclude generated files even when the dire
 name or its current schema is missing. Custom layouts that match none of these conventions remain
 a discovery limitation; do not treat historical declarations as current schemas during agent review.
 
-`coverage.excluded_migrations` lists paths only, without reading their contents. A boundary with
-recognized migrations but no collected current schema is reported in `coverage.migration_gaps`;
+`coverage.excluded_migrations` lists paths. A separate bounded adapter reads identity metadata and
+fingerprints migration evidence; historical declarations never supply current fields. Explicit context
+or configuration evidence links migrations to current schemas, with identity and completeness checked
+separately. Incomplete or ambiguous coverage is reported in `coverage.migration_gaps`;
 it contributes no guessed fields. Migrations cannot override current schemas through explicit
 connection bindings. An accepted map that previously used migrations needs normal removal/identity
 review against current evidence; do not silently carry obsolete fields forward.
@@ -192,6 +195,18 @@ blocks. Machine work left by an analysis budget remains agent work, not a reques
 A manifest carrying any `needs_review: true` **cannot be pushed**. That is the mechanism, not a
 lint: a confidently wrong data category is worse than a gap, because the gap gets reviewed and the
 wrong answer gets signed.
+
+## Accepting uncertainty
+
+An investigated field or coverage finding can be explicitly accepted with uncertainty.
+The agent presents the remaining uncertainty and map impact; a named human reviewer decides.
+`investigate.py` supplies scoped `uncertainty_candidates` and accepts approved records through
+`--uncertainties=<decisions.json>`. See [the workflow](references/accepted-uncertainty.md).
+
+Accepted uncertainty clears the affected pending review, stays visible in the exported map,
+and reopens when its evidence changes. Zero active gaps means zero unaccounted-for findings,
+including those explicitly accepted with uncertainty. Unknown meaning is not relabeled non-personal.
+Normal map acceptance and publication confirmation still apply.
 
 ## Incremental reconciliation
 
@@ -304,6 +319,60 @@ bookkeeping, and it is written up in
 Pass `--as-of=YYYY-MM-DD` to turn an already-expired claim into an error. Leave it off and the file
 is judged on its own terms — nothing in the validator reads the clock by itself, so it stays
 deterministic and the staleness check happens where it belongs, in CI or before a release.
+
+## When an agent may renew a signature
+
+The structural anchor is what makes one more thing safe: an agent may **renew** a collection whose
+structure and classification are exactly what a person signed. Nothing else. A new collection, a
+changed one, a privacy declaration, or a collection an agent renewed last time is a person's to sign.
+
+The repository opts in with a committed `.noru/interpretation-policy.yml`
+([schema](../../contract/interpretation-policy.schema.json)). `repo-enforcement` already places
+everything under `.noru/` behind the GRC reviewers in CODEOWNERS.
+
+```yaml
+kind: interpretation-policy
+version: 1
+grants:
+  - id: datamap-renewals
+    piece: privacy-datamap
+    claims:
+      - renewal          # the only value accepted; the validator enforces it, not the file
+    agents:
+      - datamap-renewal-agent
+    operators:
+      - Dana Okafor      # a named person who answers for the agent
+    max_days: 60         # at most the piece's agent ceiling below
+```
+
+The renewal names the agent, the person who answers for it, the grant, and the decision it renews:
+
+```yaml
+interpretation:
+  owner: datamap-renewal-agent
+  owner_kind: agent
+  operator: Dana Okafor
+  policy_ref: datamap-renewals
+  renews:
+    owner: Dana Okafor
+    decided_at: "2026-08-20"
+  decided_at: "2027-02-15"
+  expires_at: "2027-04-15"
+  rationale: >-
+    Every column is one Dana Okafor signed for, with the classification given then.
+```
+
+| An agent's renewal of a collection holding | It may stand for |
+|---|---|
+| ordinary personal data | 90 days, or the grant's `max_days` if shorter |
+| GDPR Article 9, or Article 10 criminal-offence data | 45 days, or the grant's `max_days` if shorter |
+
+Whether the collection is unchanged is a comparison with the manifest at the base revision, and the
+grant is read from the policy as it stood there too. CI mode passes both to the validator
+(`--base`, `--interpretation-policy`): a pull request that widens the policy is judged by the
+policy it would replace, and a base CI cannot read refuses every agent-owned collection. Run without
+`--base`, the validator warns that the renewal's lineage is unchecked. The
+[fixtures](./fixtures/) named `*agent*` show each refusal.
 
 ## Accuracy
 
@@ -578,3 +647,11 @@ Run `scripts/check_privacy.py --repo=<repository>` from this plugin to check the
 baseline and export offline. `scripts/publish_datamap.py` provides opt-in REST publication
 with provider-neutral source metadata. See [portable privacy CI](../../docs/privacy-ci.md)
 for inputs, exit codes and the supported document format.
+
+### Extraction diagnostic resolutions
+
+Investigate raw findings through the canonical gap-decision API. Valid evidence-bound resolutions
+are honored by review, validation, sealing, export and publication preflight; unresolved, partial,
+conflicting or stale findings still block. Raw diagnostics and prior rationale remain auditable.
+See [the investigation workflow](references/extraction-resolutions.md) for commands, migration
+coverage adapters, supplemental definitions and cache compatibility.
