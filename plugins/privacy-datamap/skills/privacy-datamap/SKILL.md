@@ -1,6 +1,6 @@
 ---
 name: privacy-datamap
-version: 0.12.1
+version: 0.12.2
 description: Build a privacy data map (Fides/Fideslang dataset + system manifest) for this repository by reading its schemas and evidence-backed supplemental stores, classifying the personal data in them, then landing it in Noru. Use when the user wants a data map, a RoPA, a record of processing, a fideslang manifest, or to work out what personal data a codebase actually holds and where.
 requires:
   bins: ["node", "python3", "git"]
@@ -57,7 +57,8 @@ Use the framework-independent model `runtime → client → connection → datas
 placement and schema similarity cannot establish datastore identity. Keep distinct connections
 separate when their destination is unknown. Read the scan command's “Connection relationships”
 and the README's “Connection relationship contract” when proposing or updating these bindings.
-The collector's directory fallback is provisional; automatic runtime client tracing is not yet
+The collector's directory fallback is provisional. Literal local frozen-dataclass store declarations
+with `destination` and `schema_path` can establish bindings; general runtime client tracing is not
 implemented. Complete the wrapper/configuration investigation, then use `--candidate` collection,
 reconciliation and review to show the proposed mapping's actual stores and fields before acceptance.
 Finish the preview queue's enrichment and resolve discovered boundary errors before privacy review.

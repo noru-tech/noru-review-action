@@ -1,6 +1,6 @@
 ---
 name: noru
-version: 0.12.1
+version: 0.12.2
 description: Review repositories, CI pipelines and local artifacts to identify and run relevant Noru last-mile GRC pieces. Use when the user wants to discover applicable local GRC work, connect or diagnose the suite, run a piece, or author a new one.
 requires:
   bins: ["node", "python3", "git"]
@@ -55,6 +55,12 @@ repository read-only and classify every piece as:
 Cite the file and line for every repository-derived recommendation. Keep live Noru data, local facts
 and recommendations visibly separate. Routing signals select a tool; they are not compliance
 findings and do not establish that a control is effective or ineffective.
+
+Explicit user scope takes precedence over routing keywords. A named privacy scan runs that piece
+only. For a local-code review, use `review.mjs --scope=local-code`; application terms such as
+reviewer, review outcome or approval do not authorize forge-history or human-sign-off workflows.
+Use `--pieces=privacy-datamap` when that is the requested piece; do not expand a scan into a broad
+GRC review because the application's domain happens to contain review records.
 
 The routing catalogue also declares optional utilities. Route requests to enforce the workflow,
 configure merge blockers, manage ratcheted debt, or detect GitHub ruleset drift to the independently
