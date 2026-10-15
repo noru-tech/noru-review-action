@@ -2,8 +2,8 @@
   "action": "noru-review",
   "generated_by": "scripts/publish_actions.py",
   "note": "Generated on release. Edit upstream, never here.",
-  "source_commit": "9cbbf428da9bcafd0e3858f16092239da838613d",
+  "source_commit": "dc9eacb21dc759605b711a7cadf58b4a642a63f6",
   "source_path": ".github/actions/noru-review",
   "source_repository": "noru-tech/noru-grc-engineering",
-  "version": "0.13.0"
+  "version": "0.14.0"
 }
