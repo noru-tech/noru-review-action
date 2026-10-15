@@ -1,6 +1,6 @@
 ---
 name: privacy-datamap
-version: 0.15.0
+version: 0.16.0
 description: Build a privacy data map (Fides/Fideslang dataset + system manifest) for this repository by reading its schemas and evidence-backed supplemental stores, classifying the personal data in them, then landing it in Noru. Use when the user wants a data map, a RoPA, a record of processing, a fideslang manifest, or to work out what personal data a codebase actually holds and where.
 requires:
   bins: ["node", "python3", "git"]
@@ -463,4 +463,7 @@ logical stores, deployed systems and external recipients distinct; establish bin
 construction/configuration and actual transfers. A directory or neighboring user ID proves neither
 boundary nor meaning. Maintenance retains supported accepted decisions and investigates relevant
 changes. Fresh assessment excludes earlier classifications as evidence; compare only afterward.
-Human acceptance records a decision; it cannot supply missing facts or close an extraction gap.
+Human acceptance cannot supply missing facts. Explicit, scoped uncertainty acceptance can account
+for an investigated extraction gap while retaining its unknown facts and map impact in the export.
+Follow [enrichment reuse](../../references/enrichment-reuse.md) to preserve unaffected resolutions,
+share reasoning, group migration investigations and apply a candidate without silently approving it.
